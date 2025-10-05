@@ -1,5 +1,5 @@
 import dash
-from dash import dcc, html, Input, Output
+from dash import dcc, html, Input, Output, State, callback_context
 import plotly.express as px
 import pandas as pd
 from datetime import date, timedelta
@@ -26,6 +26,12 @@ SIZE_MAP = {
 
 df['centroid_size'] = df['risk_classification'].map(SIZE_MAP)
 
+# Chat questions and answers
+CHAT_QA = {
+    "What action should I take NOW?": "[ACTION] (Monitor / Alert / Evacuate) within 48h.",
+    "What is the EXACT reason for this risk?": "Explicit Logic: GPM + SMAP + SRTM.",
+    "What is the Risk Level in the District?": "[LEVEL] (Moderate / High / Critical)."
+}
 
 available_dates = sorted(df['date'].unique())
 min_date = available_dates[0]
@@ -35,7 +41,35 @@ all_days_in_range = [min_date + timedelta(days=x) for x in range((max_date - min
 disabled_days = [day for day in all_days_in_range if day not in available_dates]
 
 app = dash.Dash(__name__)
-app.layout = html.Div(style={'display': 'flex', 'padding': '20px', 'fontFamily': 'sans-serif'}, children=[
+
+# CSS para animação de loading
+app.index_string = '''
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        {%css%}
+        <style>
+            @keyframes blink {
+                0%, 50% { opacity: 1; }
+                51%, 100% { opacity: 0; }
+            }
+        </style>
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+'''
+
+app.layout = html.Div(style={'display': 'flex', 'padding': '20px', 'fontFamily': 'sans-serif', 'position': 'relative'}, children=[
 
     html.Div(style={'width': '25%', 'padding': '0 20px 0 0'}, children=[
         html.Div(style={'backgroundColor': '#f0f0f0', 'padding': '20px', 'borderRadius': '15px', 'height': '100%'}, children=[
@@ -59,9 +93,158 @@ app.layout = html.Div(style={'display': 'flex', 'padding': '20px', 'fontFamily':
             id='map-graph',
             style={'height': '80vh'}
         )
-    ])
+    ]),
+
+    # Botão do Chat (canto inferior esquerdo)
+    html.Button(
+        "💬 Chat",
+        id="chat-button",
+        n_clicks=0,
+        style={
+            'position': 'fixed',
+            'bottom': '20px',
+            'left': '20px',
+            'zIndex': '1000',
+            'backgroundColor': '#007bff',
+            'color': 'white',
+            'border': 'none',
+            'borderRadius': '25px',
+            'padding': '12px 20px',
+            'fontSize': '16px',
+            'fontWeight': 'bold',
+            'cursor': 'pointer',
+            'boxShadow': '0 4px 8px rgba(0,0,0,0.2)',
+            'transition': 'all 0.3s ease'
+        }
+    ),
+
+    # Modal do Chat
+    html.Div(
+        id="chat-modal",
+        style={
+            'position': 'fixed',
+            'bottom': '80px',
+            'left': '20px',
+            'width': '350px',
+            'height': '500px',
+            'backgroundColor': 'white',
+            'borderRadius': '15px',
+            'boxShadow': '0 8px 32px rgba(0,0,0,0.3)',
+            'zIndex': '1001',
+            'display': 'none',
+            'flexDirection': 'column',
+            'border': '1px solid #ddd'
+        },
+        children=[
+            # Header do Chat
+            html.Div(
+                style={
+                    'backgroundColor': '#007bff',
+                    'color': 'white',
+                    'padding': '15px',
+                    'borderRadius': '15px 15px 0 0',
+                    'display': 'flex',
+                    'justifyContent': 'space-between',
+                    'alignItems': 'center'
+                },
+                children=[
+                    html.H4("🤖 Risk Assistant", style={'margin': '0', 'fontSize': '18px'}),
+                    html.Button("✕", id="close-chat", style={
+                        'background': 'none',
+                        'border': 'none',
+                        'color': 'white',
+                        'fontSize': '20px',
+                        'cursor': 'pointer'
+                    })
+                ]
+            ),
+            
+            # Área de Mensagens
+            html.Div(
+                id="chat-messages",
+                style={
+                    'flex': '1',
+                    'padding': '15px',
+                    'overflowY': 'auto',
+                    'backgroundColor': '#f8f9fa'
+                },
+                children=[
+                    html.Div(
+                        "👋 Hello! I'm your risk analysis assistant. Choose a question:",
+                        style={
+                            'backgroundColor': '#e3f2fd',
+                            'padding': '10px',
+                            'borderRadius': '10px',
+                            'marginBottom': '10px',
+                            'fontSize': '14px'
+                        }
+                    )
+                ]
+            ),
+            
+            # Botões de Perguntas
+            html.Div(
+                style={
+                    'padding': '15px',
+                    'backgroundColor': 'white',
+                    'borderRadius': '0 0 15px 15px',
+                    'borderTop': '1px solid #eee'
+                },
+                children=[
+                    html.Button(
+                        "What action should I take NOW?",
+                        id="question-1",
+                        n_clicks=0,
+                        style={
+                            'width': '100%',
+                            'padding': '10px',
+                            'marginBottom': '8px',
+                            'backgroundColor': '#f8f9fa',
+                            'border': '1px solid #ddd',
+                            'borderRadius': '8px',
+                            'cursor': 'pointer',
+                            'fontSize': '12px',
+                            'textAlign': 'left'
+                        }
+                    ),
+                    html.Button(
+                        "What is the EXACT reason for this risk?",
+                        id="question-2",
+                        n_clicks=0,
+                        style={
+                            'width': '100%',
+                            'padding': '10px',
+                            'marginBottom': '8px',
+                            'backgroundColor': '#f8f9fa',
+                            'border': '1px solid #ddd',
+                            'borderRadius': '8px',
+                            'cursor': 'pointer',
+                            'fontSize': '12px',
+                            'textAlign': 'left'
+                        }
+                    ),
+                    html.Button(
+                        "What is the Risk Level in the District?",
+                        id="question-3",
+                        n_clicks=0,
+                        style={
+                            'width': '100%',
+                            'padding': '10px',
+                            'backgroundColor': '#f8f9fa',
+                            'border': '1px solid #ddd',
+                            'borderRadius': '8px',
+                            'cursor': 'pointer',
+                            'fontSize': '12px',
+                            'textAlign': 'left'
+                        }
+                    )
+                ]
+            )
+        ]
+    )
 ])
 
+# Callback para o mapa
 @app.callback(
     Output('map-graph', 'figure'),
     Input('date-picker', 'date')
@@ -95,6 +278,112 @@ def update_map(selected_date_str):
     )
 
     return fig
+
+# Callback para abrir/fechar o chat
+@app.callback(
+    Output('chat-modal', 'style'),
+    [Input('chat-button', 'n_clicks'),
+     Input('close-chat', 'n_clicks')],
+    [State('chat-modal', 'style')]
+)
+def toggle_chat(chat_clicks, close_clicks, current_style):
+    ctx = callback_context
+    if not ctx.triggered:
+        return current_style
+    
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    if button_id == 'chat-button' and chat_clicks > 0:
+        new_style = current_style.copy()
+        new_style['display'] = 'flex'
+        return new_style
+    elif button_id == 'close-chat' and close_clicks > 0:
+        new_style = current_style.copy()
+        new_style['display'] = 'none'
+        return new_style
+    
+    return current_style
+
+# Callback para as perguntas do chat com loading
+@app.callback(
+    Output('chat-messages', 'children'),
+    [Input('question-1', 'n_clicks'),
+     Input('question-2', 'n_clicks'),
+     Input('question-3', 'n_clicks')],
+    [State('chat-messages', 'children')]
+)
+def handle_question(click1, click2, click3, current_messages):
+    import time
+    import random
+    
+    ctx = callback_context
+    if not ctx.triggered or ctx.triggered[0]['value'] == 0:
+        return current_messages
+    
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    question_map = {
+        'question-1': "What action should I take NOW?",
+        'question-2': "What is the EXACT reason for this risk?",
+        'question-3': "What is the Risk Level in the District?"
+    }
+    
+    question = question_map.get(button_id)
+    if question:
+        answer = CHAT_QA[question]
+        
+        # Adiciona pergunta do usuário
+        user_message = html.Div(
+            f"👤 {question}",
+            style={
+                'backgroundColor': '#007bff',
+                'color': 'white',
+                'padding': '10px',
+                'borderRadius': '10px',
+                'marginBottom': '10px',
+                'fontSize': '14px',
+                'textAlign': 'right'
+            }
+        )
+        
+        # Adiciona indicador de carregamento com animação
+        loading_message = html.Div(
+            [
+                html.Span("🤖 ", style={'fontSize': '16px'}),
+                html.Span("Analyzing data", style={'fontSize': '14px', 'color': '#666'}),
+                html.Span("...", style={'fontSize': '14px', 'color': '#666', 'animation': 'blink 1s infinite'})
+            ],
+            style={
+                'backgroundColor': '#f8f9fa',
+                'padding': '10px',
+                'borderRadius': '10px',
+                'marginBottom': '10px',
+                'fontSize': '14px',
+                'textAlign': 'left',
+                'border': '1px solid #e9ecef',
+                'fontStyle': 'italic'
+            }
+        )
+        
+        # Simula delay de processamento (1-3 segundos)
+        delay = random.uniform(1.0, 2.5)
+        time.sleep(delay)
+        
+        # Adiciona resposta do bot
+        bot_message = html.Div(
+            f"🤖 {answer}",
+            style={
+                'backgroundColor': '#e3f2fd',
+                'padding': '10px',
+                'borderRadius': '10px',
+                'marginBottom': '10px',
+                'fontSize': '14px',
+                'textAlign': 'left'
+            }
+        )
+        
+        return current_messages + [user_message, loading_message, bot_message]
+    
+    return current_messages
 
 if __name__ == '__main__':
     app.run(debug=True)

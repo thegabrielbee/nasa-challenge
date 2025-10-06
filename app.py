@@ -12,21 +12,21 @@ px.set_mapbox_access_token(mapbox_access_token)
 
 FLORIPA_CENTER = {"lat": -27.5969, "lon": -48.5489}
 COLOR_MAP = {
-    'Moderado': 'yellow',
-    'Alto': 'orange',
-    'Crítico': 'red'
+    'Moderate': 'yellow',
+    'High': 'orange',
+    'Critical': 'red'
 }
 
 SIZE_MAP = {
-    'Moderado': 10,
-    'Alto': 20,
-    'Crítico': 30
+    'Moderate': 10,
+    'High': 20,
+    'Critical': 30
 }
 
 MAP = {
     'Moderate': "Moderate",
-    'Alto': "High",
-    'Crítico': "Critical"
+    'High': "High",
+    'Critical': "Critical"
 }
 
 df['centroid_size'] = df['risk_classification'].map(SIZE_MAP)
@@ -52,13 +52,47 @@ app.index_string = '''
 <html>
     <head>
         {%metas%}
-        <title>{%title%}</title>
+        <title>ORBISHIELD AI</title>
         {%favicon%}
         {%css%}
         <style>
             @keyframes blink {
                 0%, 50% { opacity: 1; }
                 51%, 100% { opacity: 0; }
+            }
+            
+            * {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+            
+            html, body {
+                margin: 0;
+                padding: 0;
+                height: 100%;
+                width: 100%;
+                overflow: hidden;
+                position: fixed;
+                top: 0;
+                left: 0;
+            }
+            
+            #react-entry-point {
+                height: 100vh;
+                width: 100vw;
+                overflow: hidden;
+                position: fixed;
+                top: 0;
+                left: 0;
+            }
+            
+            .dash-spreadsheet-container {
+                overflow: hidden !important;
+            }
+            
+            .js-plotly-plot {
+                overflow: hidden !important;
             }
         </style>
     </head>
@@ -73,12 +107,19 @@ app.index_string = '''
 </html>
 '''
 
-app.layout = html.Div(style={'display': 'flex', 'padding': '20px', 'fontFamily': 'sans-serif'}, children=[
-
-    html.Div(style={'width': '25%', 'padding': '0 20px 0 0'}, children=[
-        html.Div(style={'backgroundColor': '#f0f0f0', 'padding': '20px', 'borderRadius': '15px', 'height': '100%'}, children=[
-            html.H3("Date Filter", style={'textAlign': 'center'}),
-            html.P("(only available dates)", style={'textAlign': 'center', 'fontSize': '0.9em', 'color': '#666'}),
+app.layout = html.Div(style={'display': 'flex', 'flexDirection': 'column', 'height': '100vh', 'width': '100vw', 'fontFamily': 'sans-serif', 'overflow': 'hidden', 'margin': '0', 'padding': '0', 'position': 'fixed', 'top': '0', 'left': '0'}, children=[
+    
+    # Título da página
+    html.Div(style={'backgroundColor': '#2c3e50', 'color': 'white', 'padding': '15px', 'textAlign': 'center', 'boxShadow': '0 2px 4px rgba(0,0,0,0.1)', 'flexShrink': '0'}, children=[
+        html.H1("ORBISHIELD AI - 2025 NASA Space Apps Challenge", style={'margin': '0', 'fontSize': '24px', 'fontWeight': 'bold'})
+    ]),
+    
+    # Container principal com flexbox horizontal
+    html.Div(style={'display': 'flex', 'height': 'calc(100vh - 70px)', 'padding': '10px', 'overflow': 'hidden', 'minHeight': '0'}, children=[
+        html.Div(style={'width': '25%', 'padding': '0 10px 0 0', 'display': 'flex', 'flexDirection': 'column', 'height': '100%'}, children=[
+        html.Div(style={'backgroundColor': '#f0f0f0', 'padding': '10px', 'borderRadius': '15px', 'height': '100%', 'overflow': 'hidden'}, children=[
+            html.H3("Date Filter", style={'textAlign': 'center', 'marginBottom': '20px'}),
+            html.P("(only available dates)", style={'textAlign': 'center', 'fontSize': '0.9em', 'color': '#666', 'marginBottom': '25px'}),
             dcc.DatePickerSingle(
                 id='date-picker',
                 min_date_allowed=min_date,
@@ -92,6 +133,17 @@ app.layout = html.Div(style={'display': 'flex', 'padding': '20px', 'fontFamily':
         ])
     ]),
 
+        html.Div(style={'width': '75%', 'padding': '0 0 0 10px', 'display': 'flex', 'flexDirection': 'column', 'height': '100%'}, children=[
+            html.Div(style={'backgroundColor': '#f0f0f0', 'padding': '10px', 'borderRadius': '15px', 'height': '100%', 'overflow': 'hidden'}, children=[
+                dcc.Graph(
+                    id='map-graph',
+                    style={'height': '100%', 'width': '100%', 'overflow': 'hidden'}
+                )
+            ])
+        ])
+    ]),  # Fecha o container principal flexbox horizontal
+
+    # Botão do Chat (canto inferior esquerdo)
     html.Button(
         "💬 Chat",
         id="chat-button",
@@ -114,6 +166,7 @@ app.layout = html.Div(style={'display': 'flex', 'padding': '20px', 'fontFamily':
         }
     ),
 
+    # Modal do Chat
     html.Div(
         id="chat-modal",
         style={
@@ -153,7 +206,7 @@ app.layout = html.Div(style={'display': 'flex', 'padding': '20px', 'fontFamily':
                     })
                 ]
             ),
-
+            
             # Área de Mensagens
             html.Div(
                 id="chat-messages",
@@ -176,7 +229,7 @@ app.layout = html.Div(style={'display': 'flex', 'padding': '20px', 'fontFamily':
                     )
                 ]
             ),
-
+            
             # Botões de Perguntas
             html.Div(
                 style={
@@ -236,14 +289,7 @@ app.layout = html.Div(style={'display': 'flex', 'padding': '20px', 'fontFamily':
                 ]
             )
         ]
-    ),
-
-    html.Div(style={'width': '75%', 'backgroundColor': '#f0f0f0', 'padding': '20px', 'borderRadius': '15px'}, children=[
-        dcc.Graph(
-            id='map-graph',
-            style={'height': '80vh'}
-        )
-    ])
+    )
 ])
 
 @app.callback(
@@ -275,6 +321,19 @@ def update_map(selected_date_str):
     fig.update_layout(
         margin={"r":0,"t":40,"l":0,"b":0},
         legend_title_text='Risk Level'
+    )
+    
+    # Melhorar a formatação do hover
+    fig.update_traces(
+        hovertemplate="<b>🔍 Risk Analysis</b><br>" +
+                     "<b>Risk Level:</b> %{customdata[0]}<br>" +
+                     "<b>SRTM Score:</b> %{customdata[1]}<br>" +
+                     "<b>GPM Score:</b> %{customdata[2]}<br>" +
+                     "<b>SMAP Score:</b> %{customdata[3]}<br>" +
+                     "<b>Action:</b> %{customdata[4]}<br>" +
+                     "<b>Coordinates:</b> %{lat:.5f}, %{lon:.5f}<br>" +
+                     "<extra></extra>",
+        customdata=filtered_df[["risk_classification", "srtm_score", "gpm_score", "smap_score", "recommended_action"]].values
     )
 
     return fig
@@ -386,3 +445,6 @@ def handle_question(click1, click2, click3, current_messages):
 
 if __name__ == '__main__':
     app.run(debug=True)
+
+# Para deploy com gunicorn
+server = app.server
